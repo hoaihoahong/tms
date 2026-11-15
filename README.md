@@ -58,6 +58,17 @@ Quy tắc: tên tài khoản tự bỏ dấu và bỏ khoảng trắng (Việt �
 
 **Không đưa file danh sách nhân viên (.xlsx) vào kho GitHub** – chứa email thật, và kho là Public (đã có `.gitignore` chặn khi dùng Git).
 
+## Nhập Dự án và Công việc từ Excel (Trưởng phòng)
+
+- Trang **Dự án** → **Nhập từ Excel** (có nút **File mẫu**): cột *Mã dự án, Tên dự án, Loại dự án, Tên gói thầu, Khách hàng, Bộ phận giao việc, Mức độ quan tâm, Phụ trách KT, Phụ trách PDKD, Quản lý tổng thể, Ngày bắt đầu, Ngày Deadline, Trạng thái*. Dòng trùng mã dự án bị bỏ qua.
+- Trang **Công việc** → **Nhập từ Excel**: cột *Mã dự án, Tên công việc, Ngày bắt đầu, Hạn hoàn thành, Người phụ trách, Mức ưu tiên, Trạng thái, Ghi chú, Người tạo, Ngày hoàn thành thực tế*. Người phụ trách và Người tạo ghi tên tài khoản hoặc họ tên. Trang tùy chọn **Gợi ý đầu việc** sẽ thành danh sách gợi ý khi gõ Tên công việc.
+- **Thứ tự nhập:** Người dùng → Dự án → Công việc. Mọi lần nhập đều có màn hình xem trước, báo dòng lỗi và cảnh báo.
+- `tools/chuyen_du_lieu_he_thong_cu.py`: chuyển file Google Sheet của hệ thống cũ (Milestones, Danh sách công việc, Danh sách nhân viên) thành một file Excel đúng định dạng trên. Mã dự án được tự sinh (DA-001…). File xuất ra chứa dữ liệu thật, **không đưa vào kho GitHub**.
+
+**Xóa toàn bộ tài khoản nhân viên để nạp lại** (chỉ giữ tài khoản Trưởng phòng `lytt`): trong Supabase → SQL Editor, chạy
+`delete from auth.users where id in (select id from public.profiles where username <> 'lytt');`
+(Công việc đang giao cho những người này sẽ chuyển thành "Chưa giao".)
+
 ## Cập nhật phiên bản đã chạy thật
 Khi có file SQL mới trong `supabase/migrations/`, chạy nó trong Supabase **trước**, rồi mới tải code mới lên GitHub. Bản 002: thêm cột Email và bảo vệ mật khẩu mặc định.
 
@@ -71,7 +82,8 @@ js/data.js            Lớp dữ liệu: chế độ Supabase và chế độ DE
 js/app.js             Màn hình: đăng nhập, tổng quan, dự án, công việc, báo cáo, quản trị
 js/table.js           Bảng: sắp xếp, kéo giãn cột, kéo đổi vị trí cột
 js/export.js          Xuất IN / Word / Excel
-js/import.js          Đọc file Excel danh sách người dùng, tạo file mẫu
+js/import.js          Đọc file Excel (người dùng, dự án, công việc), tạo file mẫu
+tools/                Công cụ chạy một lần (chuyển dữ liệu từ hệ thống cũ)
 js/ui.js              Hộp thoại, thông báo, biểu tượng, tiện ích
 supabase/schema.sql   Bảng dữ liệu, phân quyền, hàm quản trị
 ```

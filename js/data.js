@@ -143,6 +143,16 @@ function demoAdapter() {
       if (!t || !(isHead() || t.created_by === me().id)) deny();
       db.tasks = db.tasks.filter((x) => x.id !== id); save(db);
     },
+    async bulkProjects(rows) {
+      if (!isHead()) deny(); const db = load(); const m = me(); const now = new Date().toISOString();
+      rows.forEach((r) => db.projects.push({ ...r, id: uid(), created_by: m.id, created_at: now, updated_at: now }));
+      save(db);
+    },
+    async bulkTasks(rows) {
+      const db = load(); const m = me(); const now = new Date().toISOString();
+      rows.forEach((r) => db.tasks.push({ ...r, id: uid(), created_by: r.created_by || m.id, created_at: now, updated_at: now }));
+      save(db);
+    },
     async getSettings() { return { ...DEFAULT_SETTINGS, ...load().settings }; },
     async saveSettings(s) { if (!isHead()) deny(); const db = load(); db.settings = { ...db.settings, ...s }; save(db); },
     subscribe(cb) { listeners.add(cb); return () => listeners.delete(cb); },
@@ -219,15 +229,29 @@ function supabaseAdapter() {
       else { delete row.id; ok(await sb.from('tasks').insert({ ...row, created_by: (await myProfile()).id })); }
     },
     async deleteTask(id) { ok(await sb.from('tasks').delete().eq('id', id)); },
+    async bulkProjects(rows) {
+      const me = (await myProfile()).id;
+      const clean = rows.map((r) => ({ code: r.code, name: r.name, type: r.type || '', bid_package: r.bid_package || '', customer: r.customer || '', assigning_dept: r.assigning_dept || '',
+        interest_level: r.interest_level || 'Bình thường', tech_lead: r.tech_lead || '', biz_lead: r.biz_lead || '', manager: r.manager || '',
+        start_date: r.start_date || null, deadline: r.deadline || null, status: r.status || 'Chuẩn bị', created_by: me }));
+      for (let i = 0; i < clean.length; i += 50) ok(await sb.from('projects').insert(clean.slice(i, i + 50)));
+    },
+    async bulkTasks(rows) {
+      const me = (await myProfile()).id;
+      const clean = rows.map((r) => ({ project_id: r.project_id, name: r.name, start_date: r.start_date || null, due_date: r.due_date || null, assignee_id: r.assignee_id || null,
+        priority: r.priority || 'Trung bình', status: r.status || 'Chưa làm', note: r.note || '', created_by: r.created_by || me, completed_date: r.completed_date || null }));
+      for (let i = 0; i < clean.length; i += 50) ok(await sb.from('tasks').insert(clean.slice(i, i + 50)));
+    },
     async getSettings() {
       const { data } = await sb.from('settings').select('key,value');
       const get = (k) => data?.find((r) => r.key === k)?.value || {};
-      return { ...DEFAULT_SETTINGS, ...get('org'), ...get('secret') };   // 'secret' chỉ Trưởng phòng đọc được
+      return { ...DEFAULT_SETTINGS, ...get('org'), ...get('secret'), task_library: get('library').items || [] };   // 'secret' chỉ Trưởng phòng đọc được
     },
     async saveSettings(s) {
-      const { default_password, ...org } = s;
+      const { default_password, task_library, ...org } = s;
       ok(await sb.from('settings').upsert({ key: 'org', value: org }));
       if (default_password !== undefined) ok(await sb.from('settings').upsert({ key: 'secret', value: { default_password } }));
+      if (task_library !== undefined) ok(await sb.from('settings').upsert({ key: 'library', value: { items: task_library } }));
     },
     subscribe(cb) {
       let t; const fire = () => { clearTimeout(t); t = setTimeout(cb, 250); };
