@@ -3,7 +3,7 @@ import { db, DEMO } from './data.js';
 import { $, $$, esc, ICON, toast, modal, confirmBox, fmtDate, todayStr, initials, countUp } from './ui.js';
 import { createTable } from './table.js';
 import { printReport, exportWord, exportExcel, reportHTML } from './export.js';
-import { readUsersExcel, downloadUserTemplate } from './import.js';
+import { readUsersExcel, readProjectsExcel, readTasksExcel, downloadUserTemplate, downloadProjectTemplate, downloadTaskTemplate, stripAccents } from './import.js';
 
 /* ====================== Hằng số & trạng thái ====================== */
 const PROJECT_STATUS = ['Chuẩn bị', 'Đang thực hiện', 'Tạm dừng', 'Hoàn thành', 'Đã hủy'];
@@ -24,7 +24,13 @@ const root = $('#root');
 const isHead = () => S.user?.role === 'truong_phong';
 const nameOf = (id) => S.profiles.find((p) => p.id === id)?.full_name || '';
 const projOf = (id) => S.projects.find((p) => p.id === id);
-const headName = () => (S.profiles.find((p) => p.role === 'truong_phong' && p.active) || {}).full_name || '';
+const nk = (v) => stripAccents(v).toLowerCase().replace(/\s+/g, ' ').trim();
+// Người ký báo cáo: ưu tiên người có chức vụ "Trưởng phòng" (không phải Phó), nếu không có thì người có quyền Trưởng phòng đầu tiên
+const headName = () => {
+  const heads = S.profiles.filter((p) => p.role === 'truong_phong' && p.active);
+  const main = heads.find((p) => /truong phong/.test(nk(p.position)) && !/pho/.test(nk(p.position)));
+  return (main || heads[0] || {}).full_name || '';
+};
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const opts = (list, sel, blank) => (blank !== undefined ? `<option value="">${esc(blank)}</option>` : '') + list.map((v) => { const [val, lab] = Array.isArray(v) ? v : [v, v]; return `<option value="${esc(val)}" ${val === sel ? 'selected' : ''}>${esc(lab)}</option>`; }).join('');
 const canEditTask = (t) => isHead() || t.created_by === S.user.id || t.assignee_id === S.user.id;
@@ -273,7 +279,7 @@ function dashboardView(c) {
 function projectsView(c) {
   c.innerHTML = `<div class="tools"><div class="search grow">${ICON.search}<input class="in" id="q" placeholder="Tìm theo mã, tên dự án, khách hàng, người phụ trách…"></div>
     <select class="in" id="fs"></select><select class="in" id="ft"></select><select class="in" id="fi"></select>
-    ${isHead() ? `<button class="btn btn-primary" id="addP">${ICON.plus} Thêm dự án</button>` : ''}</div>
+    ${isHead() ? `<button class="btn" id="tplP">${ICON.xls} File mẫu</button><button class="btn" id="impP">${ICON.xls} Nhập từ Excel</button><button class="btn btn-primary" id="addP">${ICON.plus} Thêm dự án</button><input type="file" id="impPFile" accept=".xlsx" hidden>` : ''}</div>
     <div class="tools" id="exp" style="margin-top:-.2rem"><span class="small muted">Xuất theo đúng bảng đang xem:</span>${exportBtns()}<span style="flex:1"></span><button class="btn btn-ghost btn-sm" id="rst" title="Khôi phục thứ tự và độ rộng cột">Đặt lại cột</button></div>
     <div id="tbl"></div><div class="tbl-foot"><span id="cnt"></span><span>Mẹo: kéo mép tiêu đề để chỉnh độ rộng · kéo tiêu đề để đổi vị trí cột</span></div>`;
   const table = createTable({ key: 'projects', columns: PCOLS(), empty: 'Chưa có dự án nào',
@@ -292,6 +298,9 @@ function projectsView(c) {
   refresh();
   ['#q', '#fs', '#ft', '#fi'].forEach((s) => $(s).addEventListener('input', apply));
   $('#addP')?.addEventListener('click', () => openProjectForm());
+  $('#tplP')?.addEventListener('click', () => downloadProjectTemplate());
+  $('#impP')?.addEventListener('click', () => $('#impPFile').click());
+  $('#impPFile')?.addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { openProjectImport(await readProjectsExcel(f)); } catch (er) { toast(er.message, 'err'); } });
   $('#rst').onclick = () => table.resetLayout();
   bindExport($('#exp'), () => ({ title: 'Danh sách dự án', subtitle: `Tính đến ngày ${fmtDate(todayStr())} · ${table.getRows().length} dự án`, landscape: true, blocks: [{ columns: expCols(table), rows: table.getRows() }] }), 'Danh_sach_du_an');
   return { title: 'Dự án', sub: 'Danh mục dự án của phòng', refresh };
@@ -381,7 +390,7 @@ function openTaskForm(task, fixedProject) {
   const people = S.profiles.filter((p) => p.active || p.id === t.assignee_id).map((p) => [p.id, p.full_name]);
   const body = `<form id="tf" class="form-grid">
     <label class="f full">Dự án <span class="req">*</span><select class="in" name="project_id" required ${task || fixedProject ? 'disabled' : ''}>${opts(S.projects.map((p) => [p.id, `${p.code} - ${p.name}`]), t.project_id, '— Chọn dự án —')}</select></label>
-    <label class="f full">Tên công việc <span class="req">*</span><input class="in" name="name" value="${esc(t.name)}" required autocomplete="off"></label>
+    <label class="f full">Tên công việc <span class="req">*</span><input class="in" name="name" value="${esc(t.name)}" required autocomplete="off" list="dl-tlib"></label>
     <label class="f">Ngày bắt đầu<input class="in" type="date" name="start_date" value="${esc(t.start_date || '')}"></label>
     <label class="f">Hạn hoàn thành<input class="in" type="date" name="due_date" value="${esc(t.due_date || '')}"></label>
     <label class="f">Người phụ trách<select class="in" name="assignee_id">${opts(people, t.assignee_id, '— Chưa giao —')}</select></label>
@@ -389,7 +398,7 @@ function openTaskForm(task, fixedProject) {
     <label class="f">Trạng thái<select class="in" name="status">${opts(TASK_STATUS, t.status)}</select></label>
     <label class="f" id="cdw">Ngày hoàn thành thực tế<input class="in" type="date" name="completed_date" value="${esc(t.completed_date || '')}"></label>
     <label class="f full">Ghi chú<textarea class="in" name="note">${esc(t.note)}</textarea></label>
-    ${task ? `<div class="full small muted">Người tạo: <b>${esc(nameOf(t.created_by) || '—')}</b></div>` : ''}</form>`;
+    ${task ? `<div class="full small muted">Người tạo: <b>${esc(nameOf(t.created_by) || '—')}</b></div>` : ''}<datalist id="dl-tlib">${(S.settings.task_library || []).map((v) => `<option value="${esc(v)}">`).join('')}</datalist></form>`;
   const m = modal({ title: task ? 'Sửa công việc' : 'Thêm công việc', body, buttons: [{ label: 'Hủy', close: true }, { label: 'Lưu công việc', cls: 'btn-primary', onClick: async (ov) => {
     const f = $('#tf', ov); if (!f.reportValidity()) return false;
     const v = Object.fromEntries(new FormData(f)); v.project_id = t.project_id || $('[name=project_id]', f).value;
@@ -435,6 +444,7 @@ function tasksView(c) {
   c.innerHTML = `<div class="tools"><div class="search grow">${ICON.search}<input class="in" id="q" placeholder="Tìm theo tên công việc, ghi chú…"></div>
     <select class="in" id="fp"></select><select class="in" id="fa"></select><select class="in" id="fs"></select><select class="in" id="fr"></select>
     <label class="small" style="display:flex;gap:.4rem;align-items:center;font-weight:600"><input type="checkbox" id="mine"> Việc của tôi</label>
+    ${isHead() ? `<button class="btn" id="tplT">${ICON.xls} File mẫu</button><button class="btn" id="impT">${ICON.xls} Nhập từ Excel</button><input type="file" id="impTFile" accept=".xlsx" hidden>` : ''}
     <button class="btn btn-primary" id="addT">${ICON.plus} Thêm công việc</button></div>
     <div class="tools" id="exp" style="margin-top:-.2rem">${modeTabs()}<span style="flex:1"></span>${exportBtns()}<button class="btn btn-ghost btn-sm" id="rst">Đặt lại cột</button></div>
     <div id="tl"></div><div class="tbl-foot"><span id="cnt"></span><span>Kéo thẻ ở dạng Kanban để đổi trạng thái</span></div>`;
@@ -452,6 +462,9 @@ function tasksView(c) {
   ['#q', '#fp', '#fa', '#fs', '#fr', '#mine'].forEach((s) => $(s).addEventListener('input', apply));
   $('#addT').onclick = () => (S.projects.length ? openTaskForm() : toast('Cần có ít nhất một dự án trước khi thêm công việc', 'err'));
   $('#rst').onclick = () => list.table.resetLayout();
+  $('#tplT')?.addEventListener('click', () => downloadTaskTemplate());
+  $('#impT')?.addEventListener('click', () => (S.projects.length ? $('#impTFile').click() : toast('Hãy nhập dự án trước, rồi mới nhập công việc', 'err')));
+  $('#impTFile')?.addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { openTaskImport(await readTasksExcel(f)); } catch (er) { toast(er.message, 'err'); } });
   bindExport($('#exp'), () => ({ title: 'Danh sách công việc', subtitle: `Tính đến ngày ${fmtDate(todayStr())} · ${list.getRows().length} công việc`, landscape: true, blocks: [{ columns: expCols(list.table), rows: list.getRows() }] }), 'Danh_sach_cong_viec');
   return { title: 'Công việc', sub: 'Toàn bộ công việc của các dự án', refresh };
 }
@@ -560,6 +573,7 @@ function validateImport(rows) {
     else if (seen.has(r.username)) err = 'Trùng tên TK trong file';
     else if (!r.full_name.trim()) err = 'Thiếu họ tên';
     else if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) err = 'Email không hợp lệ';
+    else if (S.profiles.some((p) => nk(p.full_name) === nk(r.full_name))) err = 'Họ tên trùng một tài khoản đang có (bỏ qua)';
     if (r.username) seen.add(r.username);
     return { ...r, err };
   });
@@ -567,9 +581,9 @@ function validateImport(rows) {
 function openImportPreview(rawRows) {
   const list = validateImport(rawRows); const good = list.filter((x) => !x.err);
   const body = `<div id="impBody"><p style="margin:0 0 .8rem">Đọc được <b>${list.length}</b> dòng: <b style="color:var(--success)">${good.length} hợp lệ</b>${list.length - good.length ? `, <b style="color:var(--danger)">${list.length - good.length} có lỗi</b> (sẽ bỏ qua)` : ''}.
-    Mỗi tài khoản được tạo với quyền <b>Nhân viên</b> và mật khẩu mặc định ghi ở ô bên dưới.</p>
-    <div style="overflow:auto;max-height:46vh;border:1px solid var(--border);border-radius:var(--r)"><table class="dt" style="width:100%;table-layout:auto"><thead><tr><th>Dòng</th><th>Tên đăng nhập</th><th>Họ tên</th><th>Email</th><th>Kết quả</th></tr></thead><tbody>
-    ${list.map((x) => `<tr><td class="idx">${x.line}</td><td><b>${esc(x.username)}</b>${x.raw && x.raw !== x.username ? `<div class="small muted">từ "${esc(x.raw)}"</div>` : ''}</td><td>${esc(x.full_name)}</td><td>${esc(x.email)}</td><td>${x.err ? `<span class="pill bad">${esc(x.err)}</span>` : '<span class="pill ok">Hợp lệ</span>'}</td></tr>`).join('')}</tbody></table></div>
+    Quyền lấy theo cột <b>Quyền</b> trong file (không có cột này thì là <b>Nhân viên</b>); mật khẩu mặc định ghi ở ô bên dưới.</p>
+    <div style="overflow:auto;max-height:46vh;border:1px solid var(--border);border-radius:var(--r)"><table class="dt" style="width:100%;table-layout:auto"><thead><tr><th>Dòng</th><th>Tên đăng nhập</th><th>Họ tên</th><th>Email</th><th>Chức vụ</th><th>Quyền</th><th>Kết quả</th></tr></thead><tbody>
+    ${list.map((x) => `<tr><td class="idx">${x.line}</td><td><b>${esc(x.username)}</b>${x.raw && x.raw !== x.username ? `<div class="small muted">từ "${esc(x.raw)}"</div>` : ''}</td><td>${esc(x.full_name)}</td><td>${esc(x.email)}</td><td>${esc(x.position)}</td><td>${x.role === 'truong_phong' ? 'Trưởng phòng' : 'Nhân viên'}</td><td>${x.err ? `<span class="pill bad">${esc(x.err)}</span>` : '<span class="pill ok">Hợp lệ</span>'}</td></tr>`).join('')}</tbody></table></div>
     <label class="f" style="margin-top:1rem">Mật khẩu mặc định cho các tài khoản mới <span class="req">*</span><input class="in" id="impPw" type="text" autocomplete="off" value="${esc(S.settings.default_password || '')}" placeholder="Tối thiểu 6 ký tự, ví dụ nhập mật khẩu cô chọn"></label>
     <p class="small muted" id="impProg" style="margin:.8rem 0 0">Mật khẩu này được lưu kín trong Supabase (chỉ Trưởng phòng xem được), lần sau tự điền sẵn. Mỗi 5 phút Supabase chỉ cho tạo khoảng 30 tài khoản. Nếu file nhiều hơn, app sẽ dừng và báo để cô nhập tiếp phần còn lại sau.</p></div>`;
   modal({ title: 'Nhập người dùng từ Excel', size: '', body, onClose: () => { refreshAll(); },
@@ -580,7 +594,7 @@ function openImportPreview(rawRows) {
       const prog = $('#impProg', ov); const fails = []; let done = 0; let stopped = false;
       for (const u of good) {
         prog.textContent = `Đang tạo ${done + fails.length + 1} / ${good.length}: ${u.username}…`;
-        try { await db.createUser({ username: u.username, full_name: u.full_name, email: u.email, password: pw, role: 'nhan_vien', position: '' }); done++; }
+        try { await db.createUser({ username: u.username, full_name: u.full_name, email: u.email, password: pw, role: u.role === 'truong_phong' ? 'truong_phong' : 'nhan_vien', position: u.position || '' }); done++; }
         catch (e) { fails.push(`${u.username}: ${e.message}`); if (/giới hạn|Chưa chạy bản cập nhật/.test(e.message)) { stopped = true; break; } }
       }
       const left = good.length - done - fails.length;
@@ -592,6 +606,88 @@ function openImportPreview(rawRows) {
       if (done) toast(`Đã tạo ${done} tài khoản`, 'ok');
       return false; } }] });
 }
+/* ---------- Nhập Dự án / Công việc hàng loạt từ Excel ---------- */
+const matchEnum = (v, list, def) => (String(v || '').trim() ? list.find((x) => nk(x) === nk(v)) || null : def);
+const oneLine = (v) => String(v || '').replace(/\s*[\r\n]+\s*/g, ' ').trim();
+const short = (t, n = 110) => (String(t).length > n ? String(t).slice(0, n) + '…' : String(t));
+function bulkPreview({ title, noun, intro, cols, list, extra = '', run }) {
+  const good = list.filter((x) => !x.err); const bad = list.length - good.length; const warn = good.filter((x) => x.warn).length;
+  const body = `<div id="bkBody"><p style="margin:0 0 .8rem">Đọc được <b>${list.length}</b> dòng: <b style="color:var(--success)">${good.length} hợp lệ</b>${bad ? `, <b style="color:var(--danger)">${bad} bị bỏ qua</b>` : ''}${warn ? `, <b style="color:var(--warning)">${warn} có cảnh báo</b>` : ''}. ${intro}</p>
+    <div style="overflow:auto;max-height:50vh;border:1px solid var(--border);border-radius:var(--r)"><table class="dt" style="width:100%;table-layout:auto"><thead><tr><th>Dòng</th>${cols.map((c) => `<th>${c.l}</th>`).join('')}<th>Kết quả</th></tr></thead><tbody>
+    ${list.map((x) => `<tr><td class="idx">${x.line}</td>${cols.map((c) => `<td>${esc(c.g(x))}</td>`).join('')}<td>${x.err ? `<span class="pill bad">${esc(x.err)}</span>` : x.warn ? `<span class="pill warn">${esc(x.warn)}</span>` : '<span class="pill ok">Hợp lệ</span>'}</td></tr>`).join('')}</tbody></table></div>${extra}
+    <p class="small muted" id="bkProg" style="margin:.8rem 0 0"></p></div>`;
+  modal({ title, size: 'xl', body, onClose: () => { refreshAll(); },
+    buttons: [{ label: 'Đóng', close: true }, { label: `Nhập ${good.length} ${noun}`, cls: 'btn-primary', onClick: async (ov) => {
+      if (!good.length) throw new Error('Không có dòng hợp lệ để nhập');
+      const prog = $('#bkProg', ov);
+      let html;
+      try { html = await run(good, (t) => (prog.textContent = t)); }
+      catch (e) { html = `<p style="margin:0;color:var(--danger)"><b>Lỗi: ${esc(e.message)}</b></p><p class="small">Có thể một phần đã được nhập. Cô đóng cửa sổ này rồi nhập lại cùng file: các dòng đã có sẽ tự được bỏ qua.</p>`; }
+      $('#bkBody', ov).innerHTML = html; $('.modal-f .btn-primary', ov).style.display = 'none'; return false; } }] });
+}
+
+function openProjectImport(rows) {
+  const exist = new Set(S.projects.map((p) => nk(p.code))); const seen = new Set();
+  const list = rows.map((r) => {
+    const o = { ...r, code: r.code.trim(), name: oneLine(r.name), bid_package: oneLine(r.bid_package) };
+    const st = matchEnum(r.status, PROJECT_STATUS, 'Chuẩn bị'), it = matchEnum(r.interest_level, INTEREST, 'Bình thường');
+    let err = ''; let warn = '';
+    if (!o.code) err = 'Thiếu mã dự án';
+    else if (exist.has(nk(o.code))) err = 'Đã có mã này trong hệ thống (bỏ qua)';
+    else if (seen.has(nk(o.code))) err = 'Trùng mã trong file';
+    else if (!o.name) err = 'Thiếu tên dự án';
+    else if (st === null) err = `Trạng thái không hợp lệ: ${r.status}`;
+    else if (it === null) err = `Mức quan tâm không hợp lệ: ${r.interest_level}`;
+    else if (r.start_date_bad || r.deadline_bad) err = 'Ngày không đọc được (dùng dạng 03/08/2026)';
+    else if (r.start_date && r.deadline && r.deadline < r.start_date) warn = 'Deadline trước ngày bắt đầu';
+    if (o.code) seen.add(nk(o.code));
+    return { ...o, status: st, interest_level: it, err, warn };
+  });
+  bulkPreview({ title: 'Nhập dự án từ Excel', noun: 'dự án', intro: 'Dòng trùng mã với dự án đã có sẽ bị bỏ qua.', list,
+    cols: [{ l: 'Mã', g: (x) => x.code }, { l: 'Tên dự án', g: (x) => short(x.name) }, { l: 'Loại', g: (x) => x.type }, { l: 'Khách hàng', g: (x) => x.customer }, { l: 'Quan tâm', g: (x) => x.interest_level },
+      { l: 'Bắt đầu', g: (x) => fmtDate(x.start_date) }, { l: 'Deadline', g: (x) => fmtDate(x.deadline) }, { l: 'Trạng thái', g: (x) => x.status }],
+    run: async (good, say) => {
+      say(`Đang nhập ${good.length} dự án…`); await db.bulkProjects(good);
+      toast(`Đã nhập ${good.length} dự án`, 'ok');
+      return `<p style="margin:0"><b style="color:var(--success)">Đã nhập ${good.length} dự án.</b></p><p class="small muted" style="margin-top:.8rem">Bước tiếp theo: vào trang <b>Công việc</b> và bấm <b>Nhập từ Excel</b> để nhập công việc.</p>`;
+    } });
+}
+
+function openTaskImport({ rows, library }) {
+  const byCode = new Map(S.projects.map((p) => [nk(p.code), p])); const byName = new Map(S.projects.map((p) => [nk(p.name), p]));
+  const byUser = new Map(); const byFull = new Map(); S.profiles.forEach((p) => { byUser.set(nk(p.username), p); byFull.set(nk(p.full_name), p); });
+  const who = (v) => (v ? byUser.get(nk(v)) || byFull.get(nk(v)) || null : null);
+  const have = new Set(S.tasks.map((t) => `${t.project_id}|${nk(t.name)}|${t.due_date || ''}`)); const seen = new Set();
+  const list = rows.map((r) => {
+    const proj = (r.project_code && byCode.get(nk(r.project_code))) || (r.project_name && byName.get(nk(r.project_name))) || null;
+    const name = oneLine(r.name);
+    const st = matchEnum(r.status, TASK_STATUS, 'Chưa làm'); const pr = matchEnum(r.priority, PRIORITY, 'Trung bình');
+    const as = who(r.assignee); const cr = who(r.creator);
+    let err = ''; let warn = '';
+    if (!name) err = 'Thiếu tên công việc';
+    else if (!proj) err = `Không tìm thấy dự án "${r.project_code || r.project_name || '(trống)'}"`;
+    else if (st === null) err = `Trạng thái không hợp lệ: ${r.status}`;
+    else if (pr === null) err = `Mức ưu tiên không hợp lệ: ${r.priority}`;
+    else if (r.start_date_bad || r.due_date_bad || r.completed_date_bad) err = 'Ngày không đọc được (dùng dạng 03/08/2026)';
+    else { const key = `${proj.id}|${nk(name)}|${r.due_date || ''}`; if (have.has(key) || seen.has(key)) err = 'Đã có công việc này (bỏ qua)'; seen.add(key); }
+    if (!err && r.assignee && !as) warn = `Không thấy "${r.assignee}" trong TMS → để trống người phụ trách`;
+    return { ...r, name, project: proj, status: st, priority: pr, assignee_id: as ? as.id : null, created_by: cr ? cr.id : null, err, warn };
+  });
+  const extra = library.length ? `<p class="small" style="margin:.8rem 0 0">Thư viện đầu việc: <b>${library.length}</b> tên sẽ được thêm vào danh sách gợi ý khi gõ Tên công việc.</p>` : '';
+  bulkPreview({ title: 'Nhập công việc từ Excel', noun: 'công việc', intro: 'Dòng đã có (cùng dự án, tên và hạn) sẽ bị bỏ qua.', list, extra,
+    cols: [{ l: 'Dự án', g: (x) => (x.project ? x.project.code : x.project_code || x.project_name || '') }, { l: 'Tên công việc', g: (x) => short(x.name, 90) }, { l: 'Hạn', g: (x) => fmtDate(x.due_date) },
+      { l: 'Phụ trách', g: (x) => x.assignee }, { l: 'Ưu tiên', g: (x) => x.priority }, { l: 'Trạng thái', g: (x) => x.status }],
+    run: async (good, say) => {
+      say(`Đang nhập ${good.length} công việc…`);
+      await db.bulkTasks(good.map((x) => ({ project_id: x.project.id, name: x.name, start_date: x.start_date, due_date: x.due_date, assignee_id: x.assignee_id, priority: x.priority, status: x.status,
+        note: x.note, created_by: x.created_by, completed_date: x.status === 'Hoàn thành' ? x.completed_date || null : null })));
+      let libMsg = '';
+      if (library.length) { const merged = [...new Set([...(S.settings.task_library || []), ...library])]; await db.saveSettings({ ...S.settings, task_library: merged }); S.settings.task_library = merged; libMsg = ` Đã thêm ${library.length} gợi ý đầu việc.`; }
+      toast(`Đã nhập ${good.length} công việc`, 'ok');
+      return `<p style="margin:0"><b style="color:var(--success)">Đã nhập ${good.length} công việc.</b>${libMsg}</p>`;
+    } });
+}
+
 function openPwForm(u) {
   modal({ title: `Đặt lại mật khẩu: ${u.username}`, size: 'sm', body: `<label class="f">Mật khẩu mới<input class="in" id="npw" type="text" minlength="6" autocomplete="off" placeholder="Tối thiểu 6 ký tự"></label><p class="small muted">Hãy báo mật khẩu mới cho người dùng và nhắc họ đổi lại sau khi đăng nhập.</p>`,
     buttons: [{ label: 'Hủy', close: true }, { label: 'Đặt mật khẩu', cls: 'btn-primary', onClick: async (ov) => { const v = $('#npw', ov).value; if (v.length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự'); await db.setPassword(u.id, v); toast('Đã đặt lại mật khẩu', 'ok'); } }] });

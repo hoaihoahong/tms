@@ -22,7 +22,7 @@ Người dùng KHÔNG kéo thả file lên GitHub. Mỗi lần cập nhật, Cla
 5. Commit mới nhất nhắc: nhánh `cap-nhat/<chủ-đề>`, tiêu đề PR dạng "Cập nhật N: ...".
 
 ## Việc đang chờ
-- **Chuyển dữ liệu từ hệ thống cũ** ("Phòng PGCNTT_Quản lý công việc", Google Apps Script + Google Sheet có các trang *Danh sách dự án*, *Danh sách công việc*, *Danh sách nhân viên*) sang TMS. Chờ người dùng gửi file Sheet gốc tải về dạng .xlsx. Kế hoạch: thêm chức năng "Nhập dự án và công việc từ Excel" (xem trước, báo lỗi, bỏ qua mã trùng), ghép Người phụ trách theo tên nhân viên đã nhập từ `DS TK.xlsx`, chạy thử DEMO rồi mới nhập thật. Không xin hay nhập mật khẩu của hệ thống cũ.
+- **Chuyển dữ liệu từ hệ thống cũ** ("Phòng PGCNTT_Quản lý công việc", Google Sheet "Quản lý công việc DVPM"): 59 dự án (trang Milestones), 90 công việc, 14 nhân viên, 68 gợi ý đầu việc. Công cụ `tools/chuyen_du_lieu_he_thong_cu.py` + chức năng Nhập Excel (Người dùng, Dự án, Công việc) đã làm; còn thiếu file nguồn gốc (người dùng gửi lại), chạy công cụ, nhập theo thứ tự Người dùng → Dự án → Công việc và đối chiếu số lượng. Tài khoản Trưởng phòng trong TMS: `lytt`. Người dùng đã nhập nhầm 21 tài khoản từ `DS TK.xlsx` và muốn xóa nạp lại (SQL xóa nằm trong README). Không đọc/nhập cột mật khẩu của hệ thống cũ (đang lưu chữ thường trong Sheet cũ: nhắc người dùng xóa cột đó).
 - Bản cập nhật Nhập người dùng từ Excel: cần chạy `supabase/migrations/002_profiles_email.sql` rồi tải code mới lên GitHub (nếu người dùng chưa làm).
 - Không đưa file .xlsx chứa dữ liệu thật vào thư mục này (kho GitHub là Public).
 
