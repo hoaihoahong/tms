@@ -1,0 +1,5 @@
+# File dữ liệu cá nhân (email nhân viên...) - không đưa lên kho Public
+*.xlsx
+*.xls
+*.csv
+DS TK*

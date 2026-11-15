@@ -78,7 +78,7 @@ async function showLogin() {
   let first = false; try { first = !(await db.hasUsers()); } catch (e) { toast(e.message, 'err'); }
   root.innerHTML = `<div class="login" id="login">
     <div class="login-art"><div><div class="bolt">${ICON.bolt}</div><h1>Hệ thống quản lý công việc</h1><p>Theo dõi dự án, giao việc, nhắc hạn và báo cáo trong một nơi duy nhất cho toàn phòng.</p></div>
-    <div class="small" style="opacity:.7">${esc(S.settings.dept_name || 'PHÒNG GIẢI PHÁP CÔNG NGHỆ THÔNG TIN')}</div></div>
+    <div class="small" style="color:#DCE7F5;font-weight:600">${esc(S.settings.dept_name || 'PHÒNG GIẢI PHÁP CÔNG NGHỆ THÔNG TIN')}</div></div>
     <div class="login-form"><div class="card"><h2>${first ? 'Tạo tài khoản Trưởng phòng' : 'Đăng nhập'}</h2>
     <p class="muted small" style="margin:.3rem 0 0">${first ? 'Chưa có tài khoản nào. Người tạo đầu tiên sẽ là Trưởng phòng.' : 'Nhập tên tài khoản và mật khẩu được cấp.'}</p>
     ${DEMO ? `<div class="banner" style="margin-top:1rem"><b>Chế độ DEMO</b> – dữ liệu chỉ lưu trong trình duyệt này.<br>Thử: <b>truongphong</b> / 123456 (Trưởng phòng) hoặc <b>nv1</b> / 123456 (Nhân viên). <button class="link" id="resetDemo" type="button">Xóa dữ liệu demo</button></div>` : ''}
@@ -177,8 +177,8 @@ const expCols = (table) => table.getColumns().map((c) => ({ label: c.label, text
 /* ====================== Định nghĩa cột ====================== */
 const dateCell = (get, over) => (r) => { const d = get(r); if (!d) return ''; return over?.(r) ? `<span class="pill bad">${fmtDate(d)}</span>` : fmtDate(d); };
 const PCOLS = () => [
-  { id: 'code', label: 'Mã dự án', width: 130, text: (p) => p.code, render: (p) => `<b>${esc(p.code)}</b>` },
-  { id: 'name', label: 'Tên dự án', width: 300, text: (p) => p.name, render: (p) => `<button class="link" data-act="open">${esc(p.name)}</button>` },
+  { id: 'code', pin: true, label: 'Mã dự án', width: 150, cls: 'nowrap', text: (p) => p.code, render: (p) => `<b>${esc(p.code)}</b>` },
+  { id: 'name', pin: true, label: 'Tên dự án', width: 300, text: (p) => p.name, render: (p) => `<button class="link" data-act="open">${esc(p.name)}</button>` },
   { id: 'type', label: 'Loại dự án', width: 150, text: (p) => p.type },
   { id: 'bid_package', label: 'Tên gói thầu', width: 240, text: (p) => p.bid_package },
   { id: 'customer', label: 'Khách hàng', width: 190, text: (p) => p.customer },
@@ -195,7 +195,7 @@ const PCOLS = () => [
 const TCOLS = (showProject) => [
   showProject && { id: 'project', label: 'Dự án', width: 250, text: (t) => { const p = projOf(t.project_id); return p ? `${p.code} - ${p.name}` : ''; },
     render: (t) => { const p = projOf(t.project_id); return p ? `<button class="link" data-act="open">${esc(p.code)}</button> <span class="muted small">${esc(p.name)}</span>` : ''; } },
-  { id: 'name', label: 'Tên công việc', width: 300, text: (t) => t.name, render: (t) => `<b>${esc(t.name)}</b>` },
+  { id: 'name', pin: true, label: 'Tên công việc', width: 300, text: (t) => t.name, render: (t) => `<b>${esc(t.name)}</b>` },
   { id: 'start_date', label: 'Ngày bắt đầu', width: 130, align: 'c', text: (t) => fmtDate(t.start_date), sort: (t) => t.start_date || '' },
   { id: 'due_date', label: 'Hạn hoàn thành', width: 150, align: 'c', text: (t) => fmtDate(t.due_date), sort: (t) => t.due_date || '', render: dateCell((t) => t.due_date, overdueTask) },
   { id: 'assignee', label: 'Người phụ trách', width: 170, text: (t) => nameOf(t.assignee_id) },
@@ -219,8 +219,8 @@ function dashboardView(c) {
   const css = () => { const cs = getComputedStyle(document.documentElement); return (n) => cs.getPropertyValue(n).trim(); };
   function build() {
     charts.forEach((x) => x.destroy()); charts = [];
-    const v = css(); const text = v('--text-2'), grid = v('--grid'), surf = v('--surface');
-    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = text; Chart.defaults.font.size = 13;
+    const v = css(); const text = v('--text'), grid = v('--grid'), surf = v('--surface');
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = text; Chart.defaults.font.size = Math.round(parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.8);
     const C = [1, 2, 3, 4, 5, 6].map((i) => v('--chart-' + i));
     const count = (arr, f, keys) => keys.map((k) => arr.filter((x) => f(x) === k).length);
     const open = S.tasks.filter((t) => t.status !== 'Hoàn thành');
@@ -240,6 +240,10 @@ function dashboardView(c) {
     const act = S.projects.filter((p) => p.status === 'Đang thực hiện').slice(0, 8);
     charts.push(new Chart($('#c4'), { type: 'bar', data: { labels: act.map((p) => p.code), datasets: [{ label: 'Hoàn thành (%)', data: act.map(progress), backgroundColor: act.map((p) => (overdueProject(p) ? C[3] : C[0])), borderRadius: 8, barThickness: 22 }] },
       options: { indexAxis: 'y', maintainAspectRatio: false, animation: { ...anim, delay: (x) => x.dataIndex * 120 }, plugins: { legend: { display: false }, tooltip: { callbacks: { title: (i) => act[i[0].dataIndex].name, label: (i) => ` ${i.raw}% hoàn thành` } } }, scales: { x: { min: 0, max: 100, grid: { color: grid }, ticks: { callback: (x) => x + '%' } }, y: { grid: { display: false } } } } }));
+    // Chưa có dữ liệu: hiện thông báo rõ ràng thay cho khung biểu đồ trống
+    const emptyMark = (id, n) => { const cv = $('#' + id), box = cv.parentElement; box.querySelector('.chart-empty')?.remove(); cv.style.visibility = n ? 'visible' : 'hidden';
+      if (!n) box.insertAdjacentHTML('beforeend', '<div class="chart-empty">Chưa có dữ liệu để hiển thị</div>'); };
+    emptyMark('c1', S.projects.length); emptyMark('c2', S.tasks.length); emptyMark('c3', S.tasks.filter((t) => t.assignee_id).length); emptyMark('c4', act.length);
   }
   function fill() {
     const mine = S.tasks.filter((t) => t.assignee_id === S.user.id && t.status !== 'Hoàn thành');
@@ -304,17 +308,25 @@ function openProjectForm(p) {
   const uniq = (k) => [...new Set(S.projects.map((x) => x[k]).filter(Boolean))];
   const people = [...new Set([...S.profiles.map((x) => x.full_name), ...uniq('tech_lead'), ...uniq('biz_lead'), ...uniq('manager')])];
   const dl = (id, list) => `<datalist id="${id}">${list.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>`;
-  const inp = (n, l, o = {}) => `<label class="f ${o.full ? 'full' : ''}">${l}${o.req ? ' <span class="req">*</span>' : ''}<input class="in" name="${n}" value="${esc(e[n])}" ${o.req ? 'required' : ''} ${o.list ? `list="${o.list}"` : ''} type="${o.type || 'text'}" autocomplete="off"></label>`;
-  const body = `<form id="pf" class="form-grid">${inp('code', 'Mã dự án', { req: 1 })}${inp('name', 'Tên dự án', { req: 1, full: 0 })}
-    ${inp('type', 'Loại dự án', { list: 'dl-type' })}${inp('bid_package', 'Tên gói thầu')}${inp('customer', 'Khách hàng', { list: 'dl-cus' })}${inp('assigning_dept', 'Bộ phận giao việc', { list: 'dl-dept' })}
-    <label class="f">Mức độ quan tâm<select class="in" name="interest_level">${opts(INTEREST, e.interest_level)}</select></label>
+  const lab = (l, req) => `<span>${l}${req ? ' <span class="req">*</span>' : ''}</span>`;
+  const inp = (n, l, o = {}) => `<label class="f ${o.full ? 'full' : ''}">${lab(l, o.req)}<input class="in" name="${n}" value="${esc(e[n])}" ${o.req ? 'required' : ''} ${o.list ? `list="${o.list}"` : ''} type="${o.type || 'text'}" autocomplete="off"></label>`;
+  const area = (n, l, rows, o = {}) => `<label class="f full">${lab(l, o.req)}<textarea class="in big" name="${n}" rows="${rows}" ${o.req ? 'required' : ''}>${esc(e[n])}</textarea></label>`;
+  const sel = (n, l, list) => `<label class="f">${lab(l)}<select class="in" name="${n}">${opts(list, e[n])}</select></label>`;
+  const body = `<form id="pf" class="form-grid wide">
+    <h3 class="form-sec full">Thông tin dự án</h3>
+    ${inp('code', 'Mã dự án', { req: 1 })}${inp('type', 'Loại dự án', { list: 'dl-type' })}${sel('status', 'Trạng thái', PROJECT_STATUS)}${sel('interest_level', 'Mức độ quan tâm', INTEREST)}
+    ${area('name', 'Tên dự án', 5, { req: 1 })}
+    ${area('bid_package', 'Tên gói thầu', 2)}
+    ${inp('customer', 'Khách hàng', { list: 'dl-cus' })}${inp('assigning_dept', 'Bộ phận giao việc', { list: 'dl-dept' })}
+    <h3 class="form-sec full">Nhân sự phụ trách</h3>
     ${inp('tech_lead', 'Phụ trách KT', { list: 'dl-ppl' })}${inp('biz_lead', 'Phụ trách PDKD', { list: 'dl-ppl' })}${inp('manager', 'Quản lý tổng thể', { list: 'dl-ppl' })}
+    <h3 class="form-sec full">Thời gian</h3>
     ${inp('start_date', 'Ngày bắt đầu', { type: 'date' })}${inp('deadline', 'Ngày Deadline', { type: 'date' })}
-    <label class="f">Trạng thái<select class="in" name="status">${opts(PROJECT_STATUS, e.status)}</select></label>
     ${dl('dl-type', [...new Set([...PROJECT_TYPES, ...uniq('type')])])}${dl('dl-cus', uniq('customer'))}${dl('dl-dept', uniq('assigning_dept'))}${dl('dl-ppl', people)}</form>`;
-  modal({ title: p ? 'Sửa dự án' : 'Thêm dự án', body, buttons: [{ label: 'Hủy', close: true }, { label: 'Lưu dự án', cls: 'btn-primary', onClick: async (ov) => {
+  modal({ title: p ? 'Sửa dự án' : 'Thêm dự án', size: 'xl', body, buttons: [{ label: 'Hủy', close: true }, { label: 'Lưu dự án', cls: 'btn-primary', onClick: async (ov) => {
     const f = $('#pf', ov); if (!f.reportValidity()) return false;
-    const v = Object.fromEntries(new FormData(f)); if (v.start_date && v.deadline && v.deadline < v.start_date) throw new Error('Ngày Deadline phải sau ngày bắt đầu');
+    const v = Object.fromEntries(new FormData(f)); ['name', 'bid_package'].forEach((k) => (v[k] = (v[k] || '').replace(/\s*[\r\n]+\s*/g, ' ').trim()));
+    if (v.start_date && v.deadline && v.deadline < v.start_date) throw new Error('Ngày Deadline phải sau ngày bắt đầu');
     await db.saveProject({ ...(p ? { id: p.id } : {}), ...v }); toast('Đã lưu dự án', 'ok'); await refreshAll(); } }] });
 }
 

@@ -13,6 +13,19 @@ Dự án: web app quản lý dự án và công việc cho Phòng Giải pháp C
 ## Chạy thử
 `python -m http.server 8765` trong thư mục này, mở `http://localhost:8765`. Chế độ DEMO: `truongphong/123456`, `nv1/123456`.
 
+## Quy trình cập nhật lên mạng (người dùng đã yêu cầu)
+Người dùng KHÔNG kéo thả file lên GitHub. Mỗi lần cập nhật, Claude làm:
+1. Sửa code trong `D:\TMS`, chạy thử (DEMO: thêm `?demo=1` sau link).
+2. Tạo nhánh mới, commit, đẩy lên GitHub, tạo **PR có số** (`gh pr create`), rồi gửi người dùng link `https://github.com/hoaihoahong/tms/pull/<số>`. Người dùng chỉ bấm **Merge pull request** → **Confirm merge**; GitHub Pages tự cập nhật sau 1 đến 2 phút.
+3. Gọi `gh` bằng `C:\Program Files\GitHub CLI\gh.exe`; đẩy bằng `git -c credential.helper= -c "credential.helper=!'C:/Program Files/GitHub CLI/gh.exe' auth git-credential" push`. Khóa đăng nhập là khóa fine-grained riêng cho kho `tms` (hết hạn 13/02/2027); hết hạn thì hướng dẫn người dùng tạo khóa mới và dán vào Terminal (không dán vào chat).
+4. Không commit file Excel/dữ liệu cá nhân (kho là Public; `.gitignore` đã chặn). Khi có file SQL mới trong `supabase/migrations/`, nhắc người dùng chạy SQL trên Supabase trước khi merge.
+5. Commit mới nhất nhắc: nhánh `cap-nhat/<chủ-đề>`, tiêu đề PR dạng "Cập nhật N: ...".
+
+## Việc đang chờ
+- **Chuyển dữ liệu từ hệ thống cũ** ("Phòng PGCNTT_Quản lý công việc", Google Apps Script + Google Sheet có các trang *Danh sách dự án*, *Danh sách công việc*, *Danh sách nhân viên*) sang TMS. Chờ người dùng gửi file Sheet gốc tải về dạng .xlsx. Kế hoạch: thêm chức năng "Nhập dự án và công việc từ Excel" (xem trước, báo lỗi, bỏ qua mã trùng), ghép Người phụ trách theo tên nhân viên đã nhập từ `DS TK.xlsx`, chạy thử DEMO rồi mới nhập thật. Không xin hay nhập mật khẩu của hệ thống cũ.
+- Bản cập nhật Nhập người dùng từ Excel: cần chạy `supabase/migrations/002_profiles_email.sql` rồi tải code mới lên GitHub (nếu người dùng chưa làm).
+- Không đưa file .xlsx chứa dữ liệu thật vào thư mục này (kho GitHub là Public).
+
 ## Việc còn có thể làm tiếp
 - Nhắc việc qua email/Zalo khi sắp đến hạn (cần Supabase Edge Function + dịch vụ gửi tin).
 - Nhập dữ liệu từ Excel; đính kèm file cho công việc; lịch sử thay đổi; biểu đồ Gantt.
