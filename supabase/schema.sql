@@ -17,6 +17,9 @@ create table if not exists public.profiles (
   created_at  timestamptz not null default now()
 );
 
+-- Email liên hệ thật của người dùng (khác với email nội bộ dùng để đăng nhập)
+alter table public.profiles add column if not exists email text not null default '';
+
 -- ---------- Cài đặt chung của phòng ----------
 create table if not exists public.settings (
   key   text primary key,
@@ -169,7 +172,8 @@ create policy profiles_update on public.profiles for update to authenticated
 
 drop policy if exists settings_read  on public.settings;
 drop policy if exists settings_write on public.settings;
-create policy settings_read  on public.settings for select to authenticated using (true);
+-- Dòng 'secret' (mật khẩu mặc định cho tài khoản mới) chỉ Trưởng phòng đọc được
+create policy settings_read  on public.settings for select to authenticated using (key <> 'secret' or public.is_head());
 create policy settings_write on public.settings for all    to authenticated
   using (public.is_head()) with check (public.is_head());
 

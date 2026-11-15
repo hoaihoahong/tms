@@ -2,7 +2,8 @@
 //  - Supabase (thật, lưu trên mạng)   - Demo (localStorage, để xem thử)
 import { CONFIG } from './config.js';
 
-export const DEMO = !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
+// Thêm ?demo=1 vào cuối link để chạy thử chế độ DEMO (dữ liệu giả trong trình duyệt, không đụng dữ liệu thật)
+export const DEMO = new URLSearchParams(location.search).has('demo') || !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
 const uid = () => crypto.randomUUID();
 const toEmail = (u) => `${String(u).trim().toLowerCase()}@${CONFIG.EMAIL_DOMAIN}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -96,13 +97,13 @@ function demoAdapter() {
       if (!isHead()) deny(); const db = load();
       const un = u.username.trim().toLowerCase();
       if (db.profiles.some((p) => p.username === un)) throw new Error('Tên đăng nhập đã tồn tại');
-      db.profiles.push({ id: uid(), username: un, full_name: u.full_name, position: u.position || '', role: u.role || 'nhan_vien', active: true, created_at: new Date().toISOString(), _pw: u.password });
+      db.profiles.push({ id: uid(), username: un, full_name: u.full_name, email: u.email || '', position: u.position || '', role: u.role || 'nhan_vien', active: true, created_at: new Date().toISOString(), _pw: u.password });
       save(db);
     },
     async updateProfile(id, patch) {
       const db = load(); const p = db.profiles.find((x) => x.id === id); if (!p) return;
       if (!isHead() && id !== me()?.id) deny();
-      const allowed = isHead() ? ['full_name', 'position', 'role', 'active'] : ['full_name', 'position'];
+      const allowed = isHead() ? ['full_name', 'position', 'email', 'role', 'active'] : ['full_name', 'position', 'email'];
       allowed.forEach((k) => { if (k in patch) p[k] = patch[k]; }); save(db);
     },
     async setPassword(id, pw) { if (!isHead()) deny(); const db = load(); db.profiles.find((x) => x.id === id)._pw = pw; save(db); },
@@ -159,6 +160,8 @@ function supabaseAdapter() {
     if (/duplicate key.*username|already registered/i.test(m)) return 'Tên đăng nhập đã tồn tại';
     if (/row-level security/i.test(m)) return 'Bạn không có quyền thực hiện thao tác này';
     if (/Password should be/i.test(m)) return 'Mật khẩu tối thiểu 6 ký tự';
+    if (/rate limit|too many/i.test(m)) return 'Supabase giới hạn số lần tạo tài khoản liên tiếp. Hãy đợi 5 phút rồi nhập tiếp phần còn lại';
+    if (/column .*email|email.*column/i.test(m)) return 'Chưa chạy bản cập nhật SQL 002 (thêm cột Email) trên Supabase';
     return m;
   };
   async function myProfile() {
@@ -194,7 +197,7 @@ function supabaseAdapter() {
       if (error) throw new Error(vnError(error.message));
       if (!data.user || (data.user.identities && !data.user.identities.length)) throw new Error('Tên đăng nhập đã tồn tại');
       await new Promise((r) => setTimeout(r, 400));
-      ok(await sb.from('profiles').update({ position: u.position || '', role: u.role || 'nhan_vien' }).eq('id', data.user.id));
+      ok(await sb.from('profiles').update({ position: u.position || '', role: u.role || 'nhan_vien', email: u.email || '' }).eq('id', data.user.id));
     },
     async updateProfile(id, patch) { ok(await sb.from('profiles').update(patch).eq('id', id)); },
     async setPassword(id, pw) { ok(await sb.rpc('admin_set_password', { target: id, new_password: pw })); },
@@ -217,10 +220,15 @@ function supabaseAdapter() {
     },
     async deleteTask(id) { ok(await sb.from('tasks').delete().eq('id', id)); },
     async getSettings() {
-      const { data } = await sb.from('settings').select('value').eq('key', 'org').maybeSingle();
-      return { ...DEFAULT_SETTINGS, ...(data?.value || {}) };
+      const { data } = await sb.from('settings').select('key,value');
+      const get = (k) => data?.find((r) => r.key === k)?.value || {};
+      return { ...DEFAULT_SETTINGS, ...get('org'), ...get('secret') };   // 'secret' chỉ Trưởng phòng đọc được
     },
-    async saveSettings(s) { ok(await sb.from('settings').upsert({ key: 'org', value: s })); },
+    async saveSettings(s) {
+      const { default_password, ...org } = s;
+      ok(await sb.from('settings').upsert({ key: 'org', value: org }));
+      if (default_password !== undefined) ok(await sb.from('settings').upsert({ key: 'secret', value: { default_password } }));
+    },
     subscribe(cb) {
       let t; const fire = () => { clearTimeout(t); t = setTimeout(cb, 250); };
       const ch = sb.channel('tms-live').on('postgres_changes', { event: '*', schema: 'public' }, fire).subscribe();

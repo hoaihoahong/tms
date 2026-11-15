@@ -48,6 +48,19 @@ Mở link lần đầu, app hiện màn hình **"Tạo tài khoản Trưởng ph
 
 Phân quyền được cưỡng chế ở **cơ sở dữ liệu** (Row Level Security trong `schema.sql`), không chỉ ẩn nút trên giao diện.
 
+## Nhập người dùng hàng loạt từ Excel (Quản trị → Người dùng)
+
+1. Bấm **Tải file mẫu** để lấy file đúng định dạng, hoặc dùng file có 3 cột đầu: **Tên tài khoản | Họ tên | Email** (dòng 1 là tiêu đề).
+2. Bấm **Nhập từ Excel**, chọn file. App hiện màn hình xem trước, đánh dấu dòng hợp lệ và dòng lỗi.
+3. Nhập **Mật khẩu mặc định** (lần đầu gõ một lần, các lần sau tự điền; lưu kín trong Supabase, chỉ Trưởng phòng xem được) rồi bấm **Nhập N tài khoản**.
+
+Quy tắc: tên tài khoản tự bỏ dấu và bỏ khoảng trắng (Việt → viet); để trống Họ tên thì lấy theo Tên tài khoản; tài khoản đã có hoặc trùng trong file sẽ bị bỏ qua; quyền mặc định là Nhân viên. Supabase giới hạn khoảng 30 lần đăng ký mỗi 5 phút nên file lớn có thể phải nhập làm hai lần.
+
+**Không đưa file danh sách nhân viên (.xlsx) vào kho GitHub** – chứa email thật, và kho là Public (đã có `.gitignore` chặn khi dùng Git).
+
+## Cập nhật phiên bản đã chạy thật
+Khi có file SQL mới trong `supabase/migrations/`, chạy nó trong Supabase **trước**, rồi mới tải code mới lên GitHub. Bản 002: thêm cột Email và bảo vệ mật khẩu mặc định.
+
 ## Cấu trúc thư mục
 
 ```
@@ -58,6 +71,7 @@ js/data.js            Lớp dữ liệu: chế độ Supabase và chế độ DE
 js/app.js             Màn hình: đăng nhập, tổng quan, dự án, công việc, báo cáo, quản trị
 js/table.js           Bảng: sắp xếp, kéo giãn cột, kéo đổi vị trí cột
 js/export.js          Xuất IN / Word / Excel
+js/import.js          Đọc file Excel danh sách người dùng, tạo file mẫu
 js/ui.js              Hộp thoại, thông báo, biểu tượng, tiện ích
 supabase/schema.sql   Bảng dữ liệu, phân quyền, hàm quản trị
 ```

@@ -3,6 +3,7 @@ import { db, DEMO } from './data.js';
 import { $, $$, esc, ICON, toast, modal, confirmBox, fmtDate, todayStr, initials, countUp } from './ui.js';
 import { createTable } from './table.js';
 import { printReport, exportWord, exportExcel, reportHTML } from './export.js';
+import { readUsersExcel, downloadUserTemplate } from './import.js';
 
 /* ====================== Hằng số & trạng thái ====================== */
 const PROJECT_STATUS = ['Chuẩn bị', 'Đang thực hiện', 'Tạm dừng', 'Hoàn thành', 'Đã hủy'];
@@ -481,10 +482,13 @@ function adminView(c) {
   let tab = 'users';
   c.innerHTML = `<div class="tools"><div class="tabs" id="tabs"><button data-t="users">Người dùng</button><button data-t="dept">Thông tin phòng</button></div></div><div id="pane"></div>`;
   const usersPane = () => {
-    const pane = $('#pane'); pane.innerHTML = `<div class="tools"><div style="flex:1" class="muted small">Trưởng phòng toàn quyền; nhân viên xem tất cả, tự tạo và cập nhật công việc của mình.</div><button class="btn btn-primary" id="addU">${ICON.plus} Thêm người dùng</button></div><div id="tbl"></div>`;
+    const pane = $('#pane'); pane.innerHTML = `<div class="tools"><div style="flex:1;min-width:14rem" class="muted small">Trưởng phòng toàn quyền; nhân viên xem tất cả, tự tạo và cập nhật công việc của mình.</div>
+      <button class="btn" id="tplU">${ICON.xls} Tải file mẫu</button><button class="btn" id="impU">${ICON.xls} Nhập từ Excel</button><button class="btn btn-primary" id="addU">${ICON.plus} Thêm người dùng</button>
+      <input type="file" id="impFile" accept=".xlsx" hidden></div><div id="tbl"></div>`;
     const table = createTable({ key: 'users', empty: 'Chưa có người dùng', columns: [
       { id: 'username', label: 'Tên tài khoản', width: 170, text: (u) => u.username, render: (u) => `<b>${esc(u.username)}</b>` },
       { id: 'full_name', label: 'Họ và tên', width: 220, text: (u) => u.full_name },
+      { id: 'email', label: 'Email', width: 250, text: (u) => u.email || '' },
       { id: 'position', label: 'Chức vụ', width: 170, text: (u) => u.position },
       { id: 'role', label: 'Quyền', width: 150, text: (u) => (u.role === 'truong_phong' ? 'Trưởng phòng' : 'Nhân viên'), render: (u) => `<span class="pill ${u.role === 'truong_phong' ? 'acc' : 'pri'}">${u.role === 'truong_phong' ? 'Trưởng phòng' : 'Nhân viên'}</span>` },
       { id: 'active', label: 'Tình trạng', width: 140, text: (u) => (u.active ? 'Hoạt động' : 'Đã khóa'), render: (u) => `<span class="pill ${u.active ? 'ok' : 'bad'}">${u.active ? 'Hoạt động' : 'Đã khóa'}</span>` },
@@ -494,6 +498,12 @@ function adminView(c) {
         if (a === 'pw') openPwForm(u);
         if (a === 'del') { if (await confirmBox(`Xóa tài khoản "${u.username}"? Các công việc người này đang phụ trách sẽ chuyển thành "Chưa giao".`, 'Xóa tài khoản')) { try { await db.deleteUser(u.id); toast('Đã xóa tài khoản', 'ok'); await refreshAll(); } catch (e) { toast(e.message, 'err'); } } } } });
     $('#tbl').append(table.el); table.setRows(S.profiles); $('#addU').onclick = () => openUserForm();
+    $('#tplU').onclick = () => downloadUserTemplate();
+    $('#impU').onclick = () => $('#impFile').click();
+    $('#impFile').onchange = async (e) => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      try { openImportPreview(await readUsersExcel(f)); } catch (er) { toast(er.message, 'err'); }
+    };
   };
   const deptPane = () => {
     const s = S.settings; const pane = $('#pane');
@@ -502,6 +512,7 @@ function adminView(c) {
       <label class="f full">Tên phòng ban<input class="in" name="dept_name" value="${esc(s.dept_name)}"></label>
       <label class="f">Địa danh ghi ngày ký<input class="in" name="place" value="${esc(s.place)}" placeholder="Ví dụ: Hà Nội"></label>
       <label class="f">Chức danh người duyệt<input class="in" name="head_title" value="${esc(s.head_title)}"></label>
+      <label class="f full">Mật khẩu mặc định cho tài khoản mới (chỉ Trưởng phòng thấy)<input class="in" name="default_password" type="text" autocomplete="off" value="${esc(s.default_password || '')}" placeholder="Dùng khi nhập người dùng từ Excel"></label>
       <div class="full small muted">Họ tên Trưởng phòng ký báo cáo lấy theo tài khoản có quyền Trưởng phòng: <b>${esc(headName())}</b></div>
       <div class="full"><button class="btn btn-primary" type="submit">Lưu thông tin phòng</button></div></form></div></div>`;
     $('#df').onsubmit = async (e) => { e.preventDefault(); try { await db.saveSettings(Object.fromEntries(new FormData(e.target))); toast('Đã lưu', 'ok'); await refreshAll(); } catch (er) { toast(er.message, 'err'); } };
@@ -516,14 +527,58 @@ function openUserForm(u) {
   const body = `<form id="uf" class="form-grid">
     <label class="f">Tên tài khoản <span class="req">*</span><input class="in" name="username" value="${esc(e.username)}" ${u ? 'disabled' : 'required'} pattern="[A-Za-z0-9._\\-]+" title="Chữ không dấu, số, dấu chấm, gạch" autocapitalize="none" autocomplete="off"></label>
     <label class="f">Họ và tên <span class="req">*</span><input class="in" name="full_name" value="${esc(e.full_name)}" required></label>
+    <label class="f">Email<input class="in" name="email" type="email" value="${esc(e.email || '')}" autocomplete="off"></label>
     <label class="f">Chức vụ<input class="in" name="position" value="${esc(e.position)}" placeholder="Chuyên viên, Kỹ sư…"></label>
     <label class="f">Quyền<select class="in" name="role" ${me ? 'disabled' : ''}>${opts([['nhan_vien', 'Nhân viên'], ['truong_phong', 'Trưởng phòng']], e.role)}</select></label>
     ${u ? `<label class="f">Tình trạng<select class="in" name="active" ${me ? 'disabled' : ''}>${opts([['true', 'Hoạt động'], ['false', 'Khóa tài khoản']], String(e.active))}</select></label>` : `<label class="f">Mật khẩu ban đầu <span class="req">*</span><input class="in" name="password" type="text" minlength="6" required autocomplete="off" placeholder="Tối thiểu 6 ký tự"></label>`}</form>`;
   modal({ title: u ? 'Sửa người dùng' : 'Thêm người dùng', body, buttons: [{ label: 'Hủy', close: true }, { label: 'Lưu', cls: 'btn-primary', onClick: async (ov) => {
     const f = $('#uf', ov); if (!f.reportValidity()) return false; const v = Object.fromEntries(new FormData(f));
-    if (u) { const patch = { full_name: v.full_name, position: v.position }; if (!me) { patch.role = v.role; patch.active = v.active === 'true'; } await db.updateProfile(u.id, patch); }
+    if (u) { const patch = { full_name: v.full_name, position: v.position, email: v.email }; if (!me) { patch.role = v.role; patch.active = v.active === 'true'; } await db.updateProfile(u.id, patch); }
     else await db.createUser(v);
     toast('Đã lưu người dùng', 'ok'); await refreshAll(); } }] });
+}
+/* ---------- Nhập người dùng hàng loạt từ Excel ---------- */
+function validateImport(rows) {
+  const exist = new Set(S.profiles.map((p) => p.username)); const seen = new Set();
+  return rows.map((r) => {
+    let err = '';
+    if (!r.username) err = 'Thiếu tên tài khoản';
+    else if (!/^[a-z0-9._-]{2,40}$/.test(r.username)) err = 'Tên TK chỉ gồm chữ không dấu, số, . _ - (2 đến 40 ký tự)';
+    else if (exist.has(r.username)) err = 'Đã có trong hệ thống';
+    else if (seen.has(r.username)) err = 'Trùng tên TK trong file';
+    else if (!r.full_name.trim()) err = 'Thiếu họ tên';
+    else if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) err = 'Email không hợp lệ';
+    if (r.username) seen.add(r.username);
+    return { ...r, err };
+  });
+}
+function openImportPreview(rawRows) {
+  const list = validateImport(rawRows); const good = list.filter((x) => !x.err);
+  const body = `<div id="impBody"><p style="margin:0 0 .8rem">Đọc được <b>${list.length}</b> dòng: <b style="color:var(--success)">${good.length} hợp lệ</b>${list.length - good.length ? `, <b style="color:var(--danger)">${list.length - good.length} có lỗi</b> (sẽ bỏ qua)` : ''}.
+    Mỗi tài khoản được tạo với quyền <b>Nhân viên</b> và mật khẩu mặc định ghi ở ô bên dưới.</p>
+    <div style="overflow:auto;max-height:46vh;border:1px solid var(--border);border-radius:var(--r)"><table class="dt" style="width:100%;table-layout:auto"><thead><tr><th>Dòng</th><th>Tên đăng nhập</th><th>Họ tên</th><th>Email</th><th>Kết quả</th></tr></thead><tbody>
+    ${list.map((x) => `<tr><td class="idx">${x.line}</td><td><b>${esc(x.username)}</b>${x.raw && x.raw !== x.username ? `<div class="small muted">từ "${esc(x.raw)}"</div>` : ''}</td><td>${esc(x.full_name)}</td><td>${esc(x.email)}</td><td>${x.err ? `<span class="pill bad">${esc(x.err)}</span>` : '<span class="pill ok">Hợp lệ</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <label class="f" style="margin-top:1rem">Mật khẩu mặc định cho các tài khoản mới <span class="req">*</span><input class="in" id="impPw" type="text" autocomplete="off" value="${esc(S.settings.default_password || '')}" placeholder="Tối thiểu 6 ký tự, ví dụ nhập mật khẩu cô chọn"></label>
+    <p class="small muted" id="impProg" style="margin:.8rem 0 0">Mật khẩu này được lưu kín trong Supabase (chỉ Trưởng phòng xem được), lần sau tự điền sẵn. Mỗi 5 phút Supabase chỉ cho tạo khoảng 30 tài khoản. Nếu file nhiều hơn, app sẽ dừng và báo để cô nhập tiếp phần còn lại sau.</p></div>`;
+  modal({ title: 'Nhập người dùng từ Excel', size: '', body, onClose: () => { refreshAll(); },
+    buttons: [{ label: 'Đóng', close: true }, { label: `Nhập ${good.length} tài khoản`, cls: 'btn-primary', onClick: async (ov) => {
+      if (!good.length) throw new Error('Không có dòng hợp lệ để nhập');
+      const pw = $('#impPw', ov).value; if (pw.length < 6) throw new Error('Mật khẩu mặc định tối thiểu 6 ký tự');
+      if (pw !== S.settings.default_password) { await db.saveSettings({ ...S.settings, default_password: pw }); S.settings.default_password = pw; }
+      const prog = $('#impProg', ov); const fails = []; let done = 0; let stopped = false;
+      for (const u of good) {
+        prog.textContent = `Đang tạo ${done + fails.length + 1} / ${good.length}: ${u.username}…`;
+        try { await db.createUser({ username: u.username, full_name: u.full_name, email: u.email, password: pw, role: 'nhan_vien', position: '' }); done++; }
+        catch (e) { fails.push(`${u.username}: ${e.message}`); if (/giới hạn|Chưa chạy bản cập nhật/.test(e.message)) { stopped = true; break; } }
+      }
+      const left = good.length - done - fails.length;
+      $('#impBody', ov).innerHTML = `<p style="margin:0"><b style="color:var(--success)">Đã tạo ${done} tài khoản.</b></p>
+        ${fails.length ? `<p style="margin:.8rem 0 .3rem;color:var(--danger)"><b>${fails.length} tài khoản chưa tạo được:</b></p><ul class="small" style="margin:0;padding-left:1.2rem">${fails.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+        ${stopped && left > 0 ? `<p class="small" style="margin-top:.8rem">Còn ${left} dòng chưa xử lý. Cô chờ 5 phút rồi nhập lại cùng file này: các tài khoản đã tạo sẽ được bỏ qua.</p>` : ''}
+        <p class="small muted" style="margin-top:.8rem">Mật khẩu mặc định: <b>${esc(pw)}</b>. Hãy nhắc mọi người đổi mật khẩu ở menu góc phải (Hồ sơ & đổi mật khẩu).</p>`;
+      $('.modal-f .btn-primary', ov).style.display = 'none';
+      if (done) toast(`Đã tạo ${done} tài khoản`, 'ok');
+      return false; } }] });
 }
 function openPwForm(u) {
   modal({ title: `Đặt lại mật khẩu: ${u.username}`, size: 'sm', body: `<label class="f">Mật khẩu mới<input class="in" id="npw" type="text" minlength="6" autocomplete="off" placeholder="Tối thiểu 6 ký tự"></label><p class="small muted">Hãy báo mật khẩu mới cho người dùng và nhắc họ đổi lại sau khi đăng nhập.</p>`,
@@ -532,10 +587,11 @@ function openPwForm(u) {
 function openProfileForm() {
   const u = S.user;
   modal({ title: 'Hồ sơ của tôi', size: 'sm', body: `<form id="mf" style="display:grid;gap:1rem"><label class="f">Họ và tên<input class="in" name="full_name" value="${esc(u.full_name)}" required></label>
+    <label class="f">Email<input class="in" name="email" type="email" value="${esc(u.email || '')}"></label>
     <label class="f">Chức vụ<input class="in" name="position" value="${esc(u.position)}"></label>
     <label class="f">Mật khẩu mới (bỏ trống nếu không đổi)<input class="in" name="password" type="password" minlength="6" autocomplete="new-password"></label></form>`,
     buttons: [{ label: 'Hủy', close: true }, { label: 'Lưu', cls: 'btn-primary', onClick: async (ov) => {
       const f = $('#mf', ov); if (!f.reportValidity()) return false; const v = Object.fromEntries(new FormData(f));
-      await db.updateProfile(u.id, { full_name: v.full_name, position: v.position }); if (v.password) await db.changeOwnPassword(v.password);
+      await db.updateProfile(u.id, { full_name: v.full_name, position: v.position, email: v.email }); if (v.password) await db.changeOwnPassword(v.password);
       toast('Đã cập nhật hồ sơ', 'ok'); await refreshAll(); } }] });
 }
