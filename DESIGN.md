@@ -14,8 +14,10 @@ Màu ngữ nghĩa cố định theo bộ: `--success` (xong), `--warning` (chú 
 
 ## Kiểu chữ
 - Phông: Be Vietnam Pro (mặc định, hỗ trợ tiếng Việt tốt), Inter, Roboto, Segoe UI, phông có chân.
-- Cỡ chữ gốc: Nhỏ 15px · Vừa 16px · **Lớn 17px (mặc định)** · Rất lớn 19px. Mọi cỡ khác tính theo `rem`.
-- Tiêu đề: đậm 650, tiêu đề cột bảng viết hoa cỡ .78rem.
+- Cỡ chữ gốc: Nhỏ 12pt (16px) · Vừa 13,5pt (18px) · **Lớn 15pt (20px, mặc định)** · Rất lớn 16,5pt (22px). Mọi cỡ khác tính theo `rem` nên tự lớn theo; độ rộng cột bảng mặc định cũng tự lớn theo cỡ chữ.
+- **Quy tắc chữ rõ nét:** không dùng chữ mờ. Chữ thường `--text`, chữ phụ `--text-2` và `--text-3` đều đạt tương phản tối thiểu 7:1 trên nền; không dùng `opacity` cho chữ; nội dung đậm 500, nhãn và tiêu đề đậm 700; chữ nhỏ nhất là .8rem.
+- Tiêu đề: đậm 650, tiêu đề cột bảng viết hoa cỡ .82rem.
+- Biểu mẫu lớn (ví dụ Thêm dự án) mở hộp thoại gần toàn màn hình (`.modal.xl`), ô Tên dự án cao 5 dòng.
 
 ## Hình khối
 - **Bo góc**: Vuông 2px · Vừa 10px (mặc định) · Tròn 16px (`--r`, `--r-sm`, `--r-lg`).

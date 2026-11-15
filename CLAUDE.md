@@ -13,6 +13,11 @@ Dự án: web app quản lý dự án và công việc cho Phòng Giải pháp C
 ## Chạy thử
 `python -m http.server 8765` trong thư mục này, mở `http://localhost:8765`. Chế độ DEMO: `truongphong/123456`, `nv1/123456`.
 
+## Việc đang chờ
+- **Chuyển dữ liệu từ hệ thống cũ** ("Phòng PGCNTT_Quản lý công việc", Google Apps Script + Google Sheet có các trang *Danh sách dự án*, *Danh sách công việc*, *Danh sách nhân viên*) sang TMS. Chờ người dùng gửi file Sheet gốc tải về dạng .xlsx. Kế hoạch: thêm chức năng "Nhập dự án và công việc từ Excel" (xem trước, báo lỗi, bỏ qua mã trùng), ghép Người phụ trách theo tên nhân viên đã nhập từ `DS TK.xlsx`, chạy thử DEMO rồi mới nhập thật. Không xin hay nhập mật khẩu của hệ thống cũ.
+- Bản cập nhật Nhập người dùng từ Excel: cần chạy `supabase/migrations/002_profiles_email.sql` rồi tải code mới lên GitHub (nếu người dùng chưa làm).
+- Không đưa file .xlsx chứa dữ liệu thật vào thư mục này (kho GitHub là Public).
+
 ## Việc còn có thể làm tiếp
 - Nhắc việc qua email/Zalo khi sắp đến hạn (cần Supabase Edge Function + dịch vụ gửi tin).
 - Nhập dữ liệu từ Excel; đính kèm file cho công việc; lịch sử thay đổi; biểu đồ Gantt.
