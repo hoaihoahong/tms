@@ -16,9 +16,32 @@ wb = openpyxl.load_workbook(SRC, data_only=True)
 T, P, E = wb['Danh sách công việc'], wb['Milestones'], wb['Danh sách nhân viên']
 LIB = wb['Thư viện đầu việc'] if 'Thư viện đầu việc' in wb.sheetnames else None
 s = lambda v: ('' if v is None else str(v).strip())
+import re
+MONTHS = {m: i for i, m in enumerate(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'], 1)}
+# Năm phổ biến nhất trong các ô ngày thật của file: dùng cho ô ghi ngày dạng chữ không có năm (ví dụ "3-Aug")
+_years = C.Counter()
+for _ws, _cols in ((P, (11, 12)), (T, (1, 2, 9))):
+    for _r in _ws.iter_rows(min_row=4, max_col=15, values_only=True):
+        for _i in _cols:
+            if isinstance(_r[_i], (datetime.datetime, datetime.date)): _years[_r[_i].year] += 1
+DEFAULT_YEAR = _years.most_common(1)[0][0] if _years else datetime.date.today().year
+
 def d(v):
     if isinstance(v, datetime.datetime): return v.date()
     if isinstance(v, datetime.date): return v
+    if isinstance(v, str):
+        t = v.strip()
+        try:
+            m = re.fullmatch(r'(\d{1,2})[-/ ]([A-Za-z]{3})[A-Za-z]*', t)            # 3-Aug
+            if m and m.group(2).lower() in MONTHS: return datetime.date(DEFAULT_YEAR, MONTHS[m.group(2).lower()], int(m.group(1)))
+            m = re.fullmatch(r'(\d{1,2})[/-](\d{1,2})', t)                            # 3/8
+            if m: return datetime.date(DEFAULT_YEAR, int(m.group(2)), int(m.group(1)))
+            m = re.fullmatch(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', t)                 # 03/08/2026
+            if m: return datetime.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+            m = re.fullmatch(r'(\d{4})-(\d{1,2})-(\d{1,2})', t)                       # 2026-08-03
+            if m: return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
     return None
 
 issues = []          # (nhóm, nội dung)
@@ -49,6 +72,8 @@ for r in P.iter_rows(min_row=4, max_col=15, values_only=True):
     if it is None:
         issues.append(('Mức quan tâm lạ', f'{code}: "{s(r[6])}" → "Bình thường"')); it = 'Bình thường'
     start, dl = d(r[11]), d(r[12])
+    if isinstance(r[11], str) or isinstance(r[12], str):
+        issues.append((f'Ngày ghi dạng chữ không có năm (tạm lấy năm {DEFAULT_YEAR}) - cần kiểm tra', f'{code}: "{s(r[11])}" → {start}  |  "{s(r[12])}" → {dl}'))
     if not start and not dl: issues.append(('Dự án thiếu ngày giao việc và Deadline', f'{code} - {s(r[2])[:70]}'))
     if len(s(r[2])) > 300: issues.append(('Tên dự án rất dài (>300 ký tự)', f'{code}: {len(s(r[2]))} ký tự'))
     projects.append([code, s(r[2]), s(r[1]), s(r[3]), s(r[4]), s(r[5]), it, person(r[7]), person(r[8]), person(r[9]), start, dl, st])
@@ -77,6 +102,8 @@ for r in T.iter_rows(min_row=4, max_col=11, values_only=True):
     if st is None: issues.append(('Trạng thái công việc lạ', f'"{s(r[5])}" → "Chưa làm"')); st = 'Chưa làm'
     pr = PRIO.get(s(r[4]).lower(), 'Trung bình')
     start, due, done = d(r[1]), d(r[2]), d(r[9])
+    if isinstance(r[1], str) or isinstance(r[2], str) or isinstance(r[9], str):
+        issues.append((f'Việc có ngày ghi dạng chữ (tạm lấy năm {DEFAULT_YEAR}) - cần kiểm tra', f'{s(r[0])[:70]}'))
     if st == 'Hoàn thành' and not done:
         done = due or start
         issues.append(('Việc đã hoàn thành nhưng thiếu Ngày hoàn thành thực tế (lấy theo Hạn hoàn thành)', f'{s(r[0])[:70]}'))
